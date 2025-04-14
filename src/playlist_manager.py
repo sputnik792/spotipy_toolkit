@@ -1,5 +1,5 @@
-from state_manager import get_last_checked, update_last_checked
-from artist_tracker import get_artist_id, get_new_releases_since_last_check
+from src.state_manager import get_last_checked, update_last_checked
+from src.artist_tracker import get_artist_id, get_new_releases_since_last_check
 
 def update_playlist(sp, playlist):
     artist_id = get_artist_id(sp, playlist['artist'])
