@@ -1,30 +1,38 @@
-from utils import parse_release_date
+from datetime import datetime
 
 def get_artist_id(sp, artist_name):
     results = sp.search(q=f'artist:{artist_name}', type='artist', limit=1)
     return results['artists']['items'][0]['id'] if results['artists']['items'] else None
 
-def get_new_tracks(artist_id, last_checked_date):
-    """Get tracks released after last_checked_date"""
+def get_new_tracks(sp, artist_id, days_back=60):
+    cutoff = datetime.now() - timedelta(days=days_back)
     albums = []
-    results = sp.artist_albums(artist_id, album_type=['album', 'single', 'compilation'])
-    albums.extend(results['items'])
+    results = sp.artist_albums(artist_id, album_type=['album', 'single'])
     
-    while results['next']:
-        results = sp.next(results)
-        albums.extend(results['items'])
+    while results:
+        albums.extend([
+            album for album in results['items']
+            if parse_date(album['release_date']) > cutoff
+        ])
+        results = sp.next(results) if results['next'] else None
     
-    new_tracks = []
+    tracks = []
     for album in albums:
-        album_date = parse_release_date(album['release_date'])
-        if album_date > last_checked_date:
-            tracks = sp.album_tracks(album['id'])['items']
-            for track in tracks:
-                new_tracks.append({
-                    'uri': track['uri'],
-                    'name': track['name'],
-                    'release_date': album['release_date'],
-                    'album_name': album['name']
-                })
+        tracks.extend([
+            {
+                'uri': track['uri'],
+                'name': track['name'],
+                'album': album['name'],
+                'release_date': album['release_date']
+            }
+            for track in sp.album_tracks(album['id'])['items']
+        ])
     
-    return new_tracks
+    return tracks
+
+def parse_date(date_str):
+    parts = date_str.split('-')
+    year = int(parts[0])
+    month = int(parts[1]) if len(parts) > 1 else 1
+    day = int(parts[2]) if len(parts) > 2 else 1
+    return datetime(year, month, day)
