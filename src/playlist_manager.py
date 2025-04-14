@@ -1,131 +1,58 @@
-from artist_tracker import get_new_tracks
-from utils import parse_release_date
+from datetime import datetime
+from artist_tracker import get_artist_id, get_new_tracks
+
+def update_all_playlists(sp):
+    for playlist in get_managed_playlists(sp):
+        update_playlist(sp, playlist)
 
 def get_managed_playlists(sp):
-    """Find playlists with #auto-update in description"""
     playlists = []
     results = sp.current_user_playlists()
     
     while results:
-        for playlist in results['items']:
-            if playlist['description'] and "#auto-update" in playlist['description'].lower():
-                artist_name = extract_artist_from_description(playlist['description'])
-                if artist_name:
+        for item in results['items']:
+            desc = item.get('description', '')
+            if "#auto-update" in desc.lower():
+                artist = extract_artist(desc)
+                if artist:
                     playlists.append({
-                        'id': playlist['id'],
-                        'name': playlist['name'],
-                        'artist_name': artist_name
+                        'id': item['id'],
+                        'name': item['name'],
+                        'artist': artist
                     })
         results = sp.next(results) if results['next'] else None
     return playlists
 
-def update_managed_playlists(sp):
-    playlists = get_managed_playlists(sp)
-    for playlist in playlists:
-        update_playlist(sp, playlist)
-
-def update_playlist(sp, playlist_id, artist_id):
-    """
-    Update playlist with new songs while preserving:
-    1. Chronological order (newest first)
-    2. Original album track order
-    3. Existing song positions
-    """
-    # Get current playlist tracks (to avoid duplicates)
-    existing_tracks = []
-    results = sp.playlist_tracks(playlist_id)
-    existing_tracks.extend([item['track']['uri'] for item in results['items']])
-    
-    while results['next']:
-        results = sp.next(results)
-        existing_tracks.extend([item['track']['uri'] for item in results['items']])
-
-    # Get artist's new releases
-    new_tracks = get_new_tracks(sp, artist_id)
-    
-    # Filter out duplicates and already existing tracks
-    new_tracks = [t for t in new_tracks 
-                 if t['uri'] not in existing_tracks]
-    
-    if not new_tracks:
-        print(f"No new tracks found for playlist {playlist_id}")
+def update_playlist(sp, playlist):
+    artist_id = get_artist_id(sp, playlist['artist'])
+    if not artist_id:
+        print(f"Artist {playlist['artist']} not found")
         return
 
-    # Group new tracks by album
-    albums = {}
-    for track in new_tracks:
-        if track['album_uri'] not in albums:
-            albums[track['album_uri']] = {
-                'name': track['album_name'],
-                'release_date': track['release_date'],
-                'tracks': []
-            }
-        albums[track['album_uri']]['tracks'].append(track)
-
-    # Sort albums by release date (newest first)
-    sorted_albums = sorted(albums.values(), 
-                          key=lambda x: parse_release_date(x['release_date']), 
-                          reverse=True)
-
-    # Prepare track batches to insert (maintaining album order)
-    tracks_to_add = []
-    for album in sorted_albums:
-        # Sort tracks by their original album position
-        album['tracks'].sort(key=lambda x: x['track_number'])
-        tracks_to_add.extend([t['uri'] for t in album['tracks']])
-
-    # Get current playlist details to determine insert position
-    playlist = sp.playlist(playlist_id)
-    current_snapshot = playlist['snapshot_id']
-
-    # Add tracks at the top while preserving album groups
-    sp.playlist_add_items(playlist_id, tracks_to_add, position=0)
+    existing = get_existing_tracks(sp, playlist['id'])
+    new_tracks = get_new_tracks(sp, artist_id)
     
-    # Re-sort the entire playlist (your existing sorting logic)
-    final_sort_playlist(sp, playlist_id)
+    # Filter duplicates
+    to_add = [t for t in new_tracks if t['uri'] not in existing]
+    
+    if to_add:
+        # Add new tracks at top
+        sp.playlist_add_items(playlist['id'], [t['uri'] for t in to_add], position=0)
+        print(f"Added {len(to_add)} tracks to {playlist['name']}")
+    else:
+        print(f"No new tracks for {playlist['name']}")
 
-    print(f"Added {len(tracks_to_add)} new tracks to playlist {playlist_id}")
-
-def final_sort_playlist(sp, playlist_id):
-    """Your existing sorting implementation"""
-    # 1. Get all tracks with metadata
-    results = sp.playlist_tracks(playlist_id)
+def get_existing_tracks(sp, playlist_id):
     tracks = []
+    results = sp.playlist_tracks(playlist_id)
     
     while results:
-        tracks.extend([{
-            'uri': item['track']['uri'],
-            'name': item['track']['name'],
-            'release_date': item['track']['album']['release_date'],
-            'album_name': item['track']['album']['name'],
-            'track_number': item['track']['track_number']
-        } for item in results['items']])
-        
-        if results['next']:
-            results = sp.next(results)
-        else:
-            results = None
+        tracks.extend(item['track']['uri'] for item in results['items'])
+        results = sp.next(results) if results['next'] else None
     
-    # 2. Group by album and sort
-    albums = {}
-    for track in tracks:
-        if track['album_name'] not in albums:
-            albums[track['album_name']] = {
-                'release_date': track['release_date'],
-                'tracks': []
-            }
-        albums[track['album_name']]['tracks'].append(track)
-    
-    # Sort albums by release date (newest first)
-    sorted_albums = sorted(albums.values(),
-                          key=lambda x: parse_release_date(x['release_date']),
-                          reverse=True)
-    
-    # Rebuild track order
-    new_order = []
-    for album in sorted_albums:
-        album['tracks'].sort(key=lambda x: x['track_number'])
-        new_order.extend([t['uri'] for t in album['tracks']])
-    
-    # 3. Reorder playlist
-    sp.playlist_replace_items(playlist_id, new_order)
+    return tracks
+
+def extract_artist(desc):
+    # Format: "#auto-update @Artist"
+    parts = desc.split('@')
+    return parts[-1].strip() if len(parts) > 1 else None
