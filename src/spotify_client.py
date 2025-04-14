@@ -4,6 +4,7 @@ from spotipy.oauth2 import SpotifyOAuth
 from spotipy.cache_handler import MemoryCacheHandler
 
 def get_spotify_client():
+    # Pre-configured token avoids interactive auth
     return spotipy.Spotify(auth_manager=SpotifyOAuth(
         client_id=os.getenv('SPOTIPY_CLIENT_ID'),
         client_secret=os.getenv('SPOTIPY_CLIENT_SECRET'),
@@ -11,8 +12,9 @@ def get_spotify_client():
         scope='playlist-modify-private playlist-read-private',
         cache_handler=MemoryCacheHandler(
             token_info={
-                'refresh_token': os.getenv('SPOTIPY_REFRESH_TOKEN')
+                'refresh_token': os.getenv('SPOTIPY_REFRESH_TOKEN'),
+                'access_token': os.getenv('SPOTIPY_ACCESS_TOKEN')  # Optional but recommended
             }
         ),
-        open_browser=False
+        open_browser=False  # Critical for CI environments
     ))
