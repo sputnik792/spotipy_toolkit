@@ -1,5 +1,5 @@
-from spotify_client import get_spotify_client
-from playlist_manager import update_all_playlists
+from src.spotify_client import get_spotify_client
+from src.playlist_manager import update_all_playlists
 
 def main():
     print("Starting playlist update...")
