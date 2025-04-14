@@ -1,9 +1,11 @@
 from spotify_client import get_spotify_client
-from playlist_manager import update_managed_playlists
+from playlist_manager import update_all_playlists
 
 def main():
+    print("Starting playlist update...")
     sp = get_spotify_client()
-    update_managed_playlists(sp)
+    update_all_playlists(sp)
+    print("Update complete!")
 
 if __name__ == "__main__":
     main()
