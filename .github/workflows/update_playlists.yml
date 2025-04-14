@@ -30,6 +30,7 @@ jobs:
         SPOTIPY_REDIRECT_URI: ${{ secrets.SPOTIPY_REDIRECT_URI }}
         SPOTIPY_REFRESH_TOKEN: ${{ secrets.SPOTIPY_REFRESH_TOKEN }}
         SPOTIPY_ACCESS_TOKEN: ${{ secrets.SPOTIPY_ACCESS_TOKEN }}  # Optional
+        SPOTIPY_EXPIRES_AT: ${{ secrets.SPOTIPY_EXPIRES_AT }}
       run: python -m src.main
     
     - name: Commit state files
